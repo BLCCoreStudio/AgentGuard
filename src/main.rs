@@ -39,7 +39,11 @@ fn main() {
         process::exit(2);
     }
 
-    let start = args.iter().position(|arg| arg == "--").map(|i| i + 1).unwrap_or(1);
+    let start = args
+        .iter()
+        .position(|arg| arg == "--")
+        .map(|i| i + 1)
+        .unwrap_or(1);
     if start >= args.len() {
         eprintln!("agentguard: no command supplied");
         process::exit(2);
