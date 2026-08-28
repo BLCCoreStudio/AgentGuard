@@ -1,0 +1,10 @@
+[package]
+name = "agentguard"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+description = "Local policy guard for AI coding agents before risky actions"
+license = "MIT"
+repository = "https://github.com/BLCCoreStudio/AgentGuard"
+
+[dependencies]
