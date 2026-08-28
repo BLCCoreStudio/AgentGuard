@@ -69,7 +69,10 @@ fn canonical_workspace(path: &str) -> Result<PathBuf, String> {
         .canonicalize()
         .map_err(|error| format!("failed to resolve workspace '{path}': {error}"))?;
     if !canonical.is_dir() {
-        return Err(format!("workspace '{}' is not a directory", canonical.display()));
+        return Err(format!(
+            "workspace '{}' is not a directory",
+            canonical.display()
+        ));
     }
     Ok(canonical)
 }
@@ -154,8 +157,8 @@ fn check_command(command: &[String]) -> i32 {
 }
 
 fn scan_prompt(path: &str) -> Result<i32, String> {
-    let text = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read '{path}': {error}"))?;
+    let text =
+        fs::read_to_string(path).map_err(|error| format!("failed to read '{path}': {error}"))?;
     let found = prompt_findings(&text);
     if found.is_empty() {
         println!("PASS: no current prompt-risk rule matched");
@@ -172,7 +175,9 @@ fn run_sandbox(workspace: &str, command: &[String], dry_run: bool) -> Result<i32
         return Err("AgentGuard sandbox mode currently supports Linux only".to_owned());
     }
     if !bwrap_available() {
-        return Err("bubblewrap ('bwrap') is required for sandbox mode and was not found".to_owned());
+        return Err(
+            "bubblewrap ('bwrap') is required for sandbox mode and was not found".to_owned(),
+        );
     }
 
     let policy = check_command(command);
@@ -308,7 +313,9 @@ mod tests {
         let command = vec!["cargo".to_owned(), "test".to_owned()];
         let args = sandbox_args(Path::new("/tmp/project"), &command);
         assert!(args.iter().any(|arg| arg == "--unshare-all"));
-        assert!(args.windows(3).any(|window| window == ["--bind", "/tmp/project", "/workspace"]));
+        assert!(args
+            .windows(3)
+            .any(|window| window == ["--bind", "/tmp/project", "/workspace"]));
     }
 
     #[test]
