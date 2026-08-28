@@ -13,7 +13,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.0
       - name: Build
         run: cargo build --release --locked
       - name: Package
