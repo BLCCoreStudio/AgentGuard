@@ -1,10 +1,20 @@
 # AgentGuard
 
-**Local policy checks and an optional Linux execution boundary for AI-assisted development commands.**
+**Review risky AI-assisted development commands before they run, scan instruction text for high-signal risks, and optionally execute approved commands inside a restricted Linux workspace.**
 
 > **Status:** development preview. No stable release has been published.
 
-AgentGuard is a Linux-first Rust CLI exploring a local control layer between AI-assisted development workflows and risky actions. The current development line combines four deliberately explainable controls:
+AgentGuard is a local, Linux-first Rust CLI for adding an explainable safety check between AI-assisted development workflows and potentially risky actions.
+
+Start with the current preview:
+
+```bash
+agentguard check -- cargo test
+agentguard scan-prompt AGENTS.md
+agentguard plan ./project -- cargo test
+```
+
+The current development line combines four deliberately explainable controls:
 
 - deterministic checks for risky shell commands
 - local prompt-risk scanning for text files
