@@ -102,7 +102,11 @@ fn skill_findings(path: &Path, text: &str) -> Vec<Finding> {
                     ),
                 });
             }
-            if let Some(parent) = path.parent().and_then(Path::file_name).and_then(|v| v.to_str()) {
+            if let Some(parent) = path
+                .parent()
+                .and_then(Path::file_name)
+                .and_then(|v| v.to_str())
+            {
                 if parent != name {
                     findings.push(Finding {
                         code: "AS005",
@@ -188,7 +192,10 @@ fn collect_assets(root: &Path, assets: &mut Vec<PathBuf>) -> Result<(), String> 
             collect_assets(&path, assets)?;
             continue;
         }
-        if matches!(path.file_name().and_then(|v| v.to_str()), Some("AGENTS.md" | "SKILL.md")) {
+        if matches!(
+            path.file_name().and_then(|v| v.to_str()),
+            Some("AGENTS.md" | "SKILL.md")
+        ) {
             assets.push(path);
         }
     }
@@ -245,9 +252,17 @@ fn main() {
             println!("PASS: checked {checked} agent asset(s); no current rule matched");
         }
         Ok((checked, findings)) => {
-            println!("WARN: checked {checked} agent asset(s); {} finding(s)", findings.len());
+            println!(
+                "WARN: checked {checked} agent asset(s); {} finding(s)",
+                findings.len()
+            );
             for finding in findings {
-                println!("- {} {}: {}", finding.code, finding.path.display(), finding.message);
+                println!(
+                    "- {} {}: {}",
+                    finding.code,
+                    finding.path.display(),
+                    finding.message
+                );
             }
             process::exit(3);
         }
