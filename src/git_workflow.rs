@@ -87,13 +87,17 @@ pub fn write_policy_config(repo: &Path, policy: Policy) -> Result<PathBuf, Strin
     Ok(path)
 }
 
-fn git_output(path: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+fn git_command(path: &Path, args: &[&str]) -> Result<std::process::Output, String> {
+    Command::new("git")
         .arg("-C")
         .arg(path)
         .args(args)
         .output()
-        .map_err(|error| format!("failed to launch git: {error}"))?;
+        .map_err(|error| format!("failed to launch git: {error}"))
+}
+
+fn git_output(path: &Path, args: &[&str]) -> Result<String, String> {
+    let output = git_command(path, args)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         return Err(if stderr.is_empty() {
@@ -105,6 +109,24 @@ fn git_output(path: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
+fn git_optional_output(path: &Path, args: &[&str]) -> Result<Option<String>, String> {
+    let output = git_command(path, args)?;
+    if output.status.success() {
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        return Ok((!value.is_empty()).then_some(value));
+    }
+    if output.status.code() == Some(1) && output.stderr.is_empty() {
+        return Ok(None);
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    Err(if stderr.is_empty() {
+        "git command failed".to_owned()
+    } else {
+        stderr
+    })
+}
+
 fn repository_root(path: &Path) -> Result<PathBuf, String> {
     let root = git_output(path, &["rev-parse", "--show-toplevel"])?;
     if root.is_empty() {
@@ -113,21 +135,23 @@ fn repository_root(path: &Path) -> Result<PathBuf, String> {
     Ok(PathBuf::from(root))
 }
 
+fn hooks_directory(root: &Path) -> Result<PathBuf, String> {
+    if let Some(configured) = git_optional_output(root, &["config", "--path", "--get", "core.hooksPath"])? {
+        let path = PathBuf::from(configured);
+        return Ok(if path.is_absolute() { path } else { root.join(path) });
+    }
+
+    let raw = PathBuf::from(git_output(root, &["rev-parse", "--git-path", "hooks"])?);
+    Ok(if raw.is_absolute() { raw } else { root.join(raw) })
+}
+
 pub fn managed_hook_script() -> &'static str {
     "#!/bin/sh\n# agentguard-managed-hook\nrepo=\"$(git rev-parse --show-toplevel 2>/dev/null)\" || exit 0\nexec agentguard check-commit-msg \"$1\" --repo \"$repo\"\n"
 }
 
 pub fn install_commit_hook(path: &Path) -> Result<PathBuf, String> {
     let root = repository_root(path)?;
-    let hook_path_raw = git_output(&root, &["rev-parse", "--git-path", "hooks/commit-msg"])?;
-    let hook_path = {
-        let raw = PathBuf::from(hook_path_raw);
-        if raw.is_absolute() {
-            raw
-        } else {
-            root.join(raw)
-        }
-    };
+    let hook_path = hooks_directory(&root)?.join("commit-msg");
 
     if hook_path.exists() {
         let existing = fs::read_to_string(&hook_path).map_err(|error| {
