@@ -1,3 +1,6 @@
+mod git_metadata;
+
+use git_metadata::Policy as GitMetadataPolicy;
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -170,6 +173,89 @@ fn scan_prompt(path: &str) -> Result<i32, String> {
     Ok(3)
 }
 
+fn parse_git_scan_args(
+    args: &[String],
+) -> Result<(PathBuf, Option<String>, GitMetadataPolicy), String> {
+    let mut path = PathBuf::from(".");
+    let mut path_seen = false;
+    let mut revision = None;
+    let mut policy = GitMetadataPolicy::Privacy;
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--rev" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--rev requires a revision or range".to_owned())?;
+                revision = Some(value.clone());
+            }
+            "--policy" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--policy requires privacy or clean".to_owned())?;
+                policy = GitMetadataPolicy::parse(value)?;
+            }
+            value if value.starts_with('-') => {
+                return Err(format!("unsupported scan-git option '{value}'"));
+            }
+            value if !path_seen => {
+                path = PathBuf::from(value);
+                path_seen = true;
+            }
+            value => return Err(format!("unexpected scan-git argument '{value}'")),
+        }
+        index += 1;
+    }
+
+    Ok((path, revision, policy))
+}
+
+fn scan_git(args: &[String]) -> Result<i32, String> {
+    let (path, revision, policy) = parse_git_scan_args(args)?;
+    let findings = git_metadata::scan_repository(&path, revision.as_deref(), policy)?;
+    if findings.is_empty() {
+        println!("PASS: no current Git metadata policy rule matched");
+        return Ok(0);
+    }
+
+    println!("BLOCK: {} Git metadata finding(s)", findings.len());
+    for (scope, finding) in findings {
+        println!("- {} [{}] {}", finding.code, scope, finding.message);
+    }
+    Ok(3)
+}
+
+fn parse_commit_message_args(args: &[String]) -> Result<(&str, GitMetadataPolicy), String> {
+    if args.is_empty() {
+        return Err("expected 'check-commit-msg <FILE> [--policy privacy|clean]'".to_owned());
+    }
+    if args.len() == 1 {
+        return Ok((&args[0], GitMetadataPolicy::Privacy));
+    }
+    if args.len() == 3 && args[1] == "--policy" {
+        return Ok((&args[0], GitMetadataPolicy::parse(&args[2])?));
+    }
+    Err("expected 'check-commit-msg <FILE> [--policy privacy|clean]'".to_owned())
+}
+
+fn check_commit_message_cli(args: &[String]) -> Result<i32, String> {
+    let (path, policy) = parse_commit_message_args(args)?;
+    let findings = git_metadata::check_commit_message(Path::new(path), policy)?;
+    if findings.is_empty() {
+        println!("PASS: commit message satisfies current Git metadata policy");
+        return Ok(0);
+    }
+
+    println!("BLOCK: {} commit metadata finding(s)", findings.len());
+    for finding in findings {
+        println!("- {} {}", finding.code, finding.message);
+    }
+    Ok(3)
+}
+
 fn run_sandbox(workspace: &str, command: &[String], dry_run: bool) -> Result<i32, String> {
     if !cfg!(target_os = "linux") {
         return Err("AgentGuard sandbox mode currently supports Linux only".to_owned());
@@ -207,7 +293,7 @@ fn run_sandbox(workspace: &str, command: &[String], dry_run: bool) -> Result<i32
 
 fn help() {
     println!(
-        "AgentGuard 0.2.0-dev\n\nUSAGE:\n  agentguard check -- <COMMAND> [ARGS...]\n  agentguard scan-prompt <FILE>\n  agentguard status\n  agentguard plan <WORKSPACE> -- <COMMAND> [ARGS...]\n  agentguard run <WORKSPACE> -- <COMMAND> [ARGS...]\n\nAgentGuard combines deterministic command policy checks, prompt-risk scanning, and an optional Linux bubblewrap execution boundary. Sandbox mode denies network access by default through namespace isolation and exposes only the selected workspace as writable."
+        "AgentGuard 0.2.0-dev\n\nUSAGE:\n  agentguard check -- <COMMAND> [ARGS...]\n  agentguard scan-prompt <FILE>\n  agentguard scan-git [PATH] [--rev <REVISION>] [--policy privacy|clean]\n  agentguard check-commit-msg <FILE> [--policy privacy|clean]\n  agentguard status\n  agentguard plan <WORKSPACE> -- <COMMAND> [ARGS...]\n  agentguard run <WORKSPACE> -- <COMMAND> [ARGS...]\n\nGIT METADATA POLICIES:\n  privacy  Default. Blocks high-confidence sensitive metadata such as Claude session URLs and credentials embedded in Git remotes.\n  clean    Includes privacy checks and also blocks agent attribution/session metadata such as AI Co-authored-by trailers and Codex session IDs.\n\nAgentGuard combines deterministic command policy checks, prompt-risk scanning, Git metadata policy checks, and an optional Linux bubblewrap execution boundary. Sandbox mode denies network access by default through namespace isolation and exposes only the selected workspace as writable."
     );
 }
 
@@ -245,6 +331,20 @@ fn main() {
                 }
             }
         }
+        "scan-git" => match scan_git(&args[1..]) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("agentguard: {error}");
+                2
+            }
+        },
+        "check-commit-msg" => match check_commit_message_cli(&args[1..]) {
+            Ok(code) => code,
+            Err(error) => {
+                eprintln!("agentguard: {error}");
+                2
+            }
+        },
         "status" if args.len() == 1 => {
             if cfg!(target_os = "linux") && bwrap_available() {
                 println!("READY: Linux bubblewrap sandbox backend is available");
@@ -280,7 +380,11 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{command_findings, parse_workspace_command, prompt_findings, sandbox_args};
+    use super::{
+        command_findings, parse_git_scan_args, parse_workspace_command, prompt_findings,
+        sandbox_args,
+    };
+    use crate::git_metadata::Policy as GitMetadataPolicy;
     use std::path::Path;
 
     #[test]
@@ -328,5 +432,27 @@ mod tests {
         let (workspace, command) = parse_workspace_command(&args).expect("valid arguments");
         assert_eq!(workspace, "/tmp/project");
         assert_eq!(command, &["true"]);
+    }
+
+    #[test]
+    fn git_scan_parser_defaults_to_privacy() {
+        let args = vec![".".to_owned()];
+        let (_, revision, policy) = parse_git_scan_args(&args).expect("valid arguments");
+        assert!(revision.is_none());
+        assert_eq!(policy, GitMetadataPolicy::Privacy);
+    }
+
+    #[test]
+    fn git_scan_parser_accepts_clean_policy_and_revision() {
+        let args = vec![
+            "./repo".to_owned(),
+            "--rev".to_owned(),
+            "origin/main..HEAD".to_owned(),
+            "--policy".to_owned(),
+            "clean".to_owned(),
+        ];
+        let (_, revision, policy) = parse_git_scan_args(&args).expect("valid arguments");
+        assert_eq!(revision.as_deref(), Some("origin/main..HEAD"));
+        assert_eq!(policy, GitMetadataPolicy::Clean);
     }
 }
