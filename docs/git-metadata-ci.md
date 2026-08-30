@@ -14,10 +14,10 @@ It can also write the pull-request body to a temporary file and apply the same d
 
 ```bash
 printf '%s' "$PR_BODY" > "$RUNNER_TEMP/agentguard-pr-body.txt"
-agentguard check-commit-msg "$RUNNER_TEMP/agentguard-pr-body.txt" --repo .
+agentguard check-git-text "$RUNNER_TEMP/agentguard-pr-body.txt" --repo .
 ```
 
-`check-commit-msg` currently exposes the shared Git-metadata text parser used by commit hooks. A future CLI cleanup may give generic outbound text its own command name without changing the policy semantics.
+`check-git-text` is the generic outbound-text command for PR descriptions, release notes, generated changelogs, issue text, or other files that should obey the repository Git metadata policy. `check-commit-msg` remains available for Git hooks and existing integrations; both commands intentionally use the same deterministic rule engine and exit codes.
 
 ## Important boundary
 
@@ -29,7 +29,13 @@ For commit messages, the locally installed `commit-msg` hook can block matching 
 agentguard install-hook .
 ```
 
-For PR descriptions, review the body locally before publishing when confidentiality requires prevention rather than rapid detection.
+For PR descriptions, review the body locally before publishing when confidentiality requires prevention rather than rapid detection. For example, save a draft body locally and run:
+
+```bash
+agentguard check-git-text pr-body.md --repo .
+```
+
+before passing that file to your Git hosting workflow.
 
 ## Safe workflow handling
 
