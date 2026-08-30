@@ -1,0 +1,3 @@
+# AgentGuard repository policy
+# Keep provenance allowed while blocking high-confidence sensitive metadata.
+git_metadata_policy = "privacy"

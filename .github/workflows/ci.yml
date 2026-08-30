@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: 1.98.0
@@ -21,6 +23,20 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked --all-targets
       - run: cargo build --release --locked
+      - name: Write pull request body safely
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > "$RUNNER_TEMP/agentguard-pr-body.txt"
+      - name: Check pull request commit metadata
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./target/release/agentguard scan-git . --rev "$BASE_SHA..$HEAD_SHA"
+      - name: Check pull request body metadata
+        if: github.event_name == 'pull_request'
+        run: ./target/release/agentguard check-commit-msg "$RUNNER_TEMP/agentguard-pr-body.txt" --repo .
 
   msrv:
     runs-on: ubuntu-24.04
