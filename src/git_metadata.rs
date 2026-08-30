@@ -27,13 +27,7 @@ pub struct Finding {
 fn is_agent_identity(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     [
-        "claude",
-        "cursor",
-        "codex",
-        "copilot",
-        "gemini",
-        "windsurf",
-        "opencode",
+        "claude", "cursor", "codex", "copilot", "gemini", "windsurf", "opencode",
     ]
     .iter()
     .any(|agent| lower.contains(agent))
@@ -147,11 +141,19 @@ pub fn scan_repository(
     let revision = revision.unwrap_or("HEAD");
     let log = git_output(
         path,
-        &["log", "--max-count=50", "--format=%x1e%H%x1f%B", revision],
+        &[
+            "log",
+            "--max-count=50",
+            "--format=%x1e%H%x1f%B",
+            revision,
+        ],
     )?;
 
     let mut findings = Vec::new();
-    for record in log.split('\u{1e}').filter(|record| !record.trim().is_empty()) {
+    for record in log
+        .split('\u{1e}')
+        .filter(|record| !record.trim().is_empty())
+    {
         let Some((sha, body)) = record.split_once('\u{1f}') else {
             continue;
         };
@@ -170,8 +172,12 @@ pub fn scan_repository(
 }
 
 pub fn check_commit_message(path: &Path, policy: Policy) -> Result<Vec<Finding>, String> {
-    let text = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read commit message '{}': {error}", path.display()))?;
+    let text = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "failed to read commit message '{}': {error}",
+            path.display()
+        )
+    })?;
     Ok(message_findings(&text, policy))
 }
 
@@ -214,9 +220,8 @@ mod tests {
 
     #[test]
     fn remote_scanner_flags_embedded_pat() {
-        let findings = remote_findings(
-            "origin https://github_pat_123456@github.com/example/repo.git (fetch)",
-        );
+        let findings =
+            remote_findings("origin https://github_pat_123456@github.com/example/repo.git (fetch)");
         assert!(findings.iter().any(|finding| finding.code == "GM005"));
     }
 
