@@ -54,7 +54,8 @@ pub fn resolve_policy(repo: &Path, explicit: Option<Policy>) -> Result<Policy, S
         return Ok(policy);
     }
 
-    let config = repo.join(CONFIG_NAME);
+    let root = repository_root(repo)?;
+    let config = root.join(CONFIG_NAME);
     if !config.exists() {
         return Ok(Policy::Privacy);
     }
@@ -65,7 +66,8 @@ pub fn resolve_policy(repo: &Path, explicit: Option<Policy>) -> Result<Policy, S
 }
 
 pub fn write_policy_config(repo: &Path, policy: Policy) -> Result<PathBuf, String> {
-    let path = repo.join(CONFIG_NAME);
+    let root = repository_root(repo)?;
+    let path = root.join(CONFIG_NAME);
     if path.exists() {
         return Err(format!(
             "refusing to overwrite existing '{}'; edit it explicitly instead",
@@ -144,7 +146,10 @@ pub fn install_commit_hook(path: &Path) -> Result<PathBuf, String> {
 
     if let Some(parent) = hook_path.parent() {
         fs::create_dir_all(parent).map_err(|error| {
-            format!("failed to create hook directory '{}': {error}", parent.display())
+            format!(
+                "failed to create hook directory '{}': {error}",
+                parent.display()
+            )
         })?;
     }
     fs::write(&hook_path, managed_hook_script())
@@ -226,7 +231,10 @@ mod tests {
 
     #[test]
     fn config_defaults_to_privacy() {
-        assert_eq!(parse_policy_config("# empty policy\n").unwrap(), Policy::Privacy);
+        assert_eq!(
+            parse_policy_config("# empty policy\n").unwrap(),
+            Policy::Privacy
+        );
     }
 
     #[test]
