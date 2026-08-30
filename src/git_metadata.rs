@@ -147,17 +147,16 @@ pub fn scan_repository(
     let revision = revision.unwrap_or("HEAD");
     let log = git_output(
         path,
-        &["log", "-z", "--max-count=50", "--format=%H%x00%B", revision],
+        &["log", "--max-count=50", "--format=%x1e%H%x1f%B", revision],
     )?;
 
     let mut findings = Vec::new();
-    let fields: Vec<&str> = log.split('\0').collect();
-    for pair in fields.chunks(2) {
-        if pair.len() != 2 || pair[0].trim().is_empty() {
+    for record in log.split('\u{1e}').filter(|record| !record.trim().is_empty()) {
+        let Some((sha, body)) = record.split_once('\u{1f}') else {
             continue;
-        }
-        let sha = pair[0].trim().to_owned();
-        for finding in message_findings(pair[1], policy) {
+        };
+        let sha = sha.trim().to_owned();
+        for finding in message_findings(body, policy) {
             findings.push((sha.clone(), finding));
         }
     }
