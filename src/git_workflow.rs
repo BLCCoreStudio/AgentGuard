@@ -277,10 +277,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock after unix epoch")
             .as_nanos();
-        let path = env::temp_dir().join(format!(
-            "agentguard-{label}-{}-{nonce}",
-            std::process::id()
-        ));
+        let path =
+            env::temp_dir().join(format!("agentguard-{label}-{}-{nonce}", std::process::id()));
         fs::create_dir_all(&path).expect("create test repo directory");
         let status = Command::new("git")
             .arg("init")
