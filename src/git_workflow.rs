@@ -136,13 +136,23 @@ fn repository_root(path: &Path) -> Result<PathBuf, String> {
 }
 
 fn hooks_directory(root: &Path) -> Result<PathBuf, String> {
-    if let Some(configured) = git_optional_output(root, &["config", "--path", "--get", "core.hooksPath"])? {
+    if let Some(configured) =
+        git_optional_output(root, &["config", "--path", "--get", "core.hooksPath"])?
+    {
         let path = PathBuf::from(configured);
-        return Ok(if path.is_absolute() { path } else { root.join(path) });
+        return Ok(if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        });
     }
 
     let raw = PathBuf::from(git_output(root, &["rev-parse", "--git-path", "hooks"])?);
-    Ok(if raw.is_absolute() { raw } else { root.join(raw) })
+    Ok(if raw.is_absolute() {
+        raw
+    } else {
+        root.join(raw)
+    })
 }
 
 pub fn managed_hook_script() -> &'static str {
