@@ -512,7 +512,7 @@ mod tests {
         prompt_findings, sandbox_args, OutputFormat,
     };
     use crate::git_metadata::Policy as GitMetadataPolicy;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn blocks_critical_recursive_delete() {
