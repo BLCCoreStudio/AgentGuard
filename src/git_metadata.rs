@@ -141,12 +141,7 @@ pub fn scan_repository(
     let revision = revision.unwrap_or("HEAD");
     let log = git_output(
         path,
-        &[
-            "log",
-            "--max-count=50",
-            "--format=%x1e%H%x1f%B",
-            revision,
-        ],
+        &["log", "--max-count=50", "--format=%x1e%H%x1f%B", revision],
     )?;
 
     let mut findings = Vec::new();
