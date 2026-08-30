@@ -269,15 +269,7 @@ fn scan_git(args: &[String]) -> Result<i32, String> {
 
 fn parse_commit_message_args(
     args: &[String],
-) -> Result<
-    (
-        String,
-        PathBuf,
-        Option<GitMetadataPolicy>,
-        OutputFormat,
-    ),
-    String,
-> {
+) -> Result<(String, PathBuf, Option<GitMetadataPolicy>, OutputFormat), String> {
     let Some(file) = args.first() else {
         return Err(
             "expected 'check-commit-msg <FILE> [--repo PATH] [--policy privacy|clean] [--format text|json]'"
