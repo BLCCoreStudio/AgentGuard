@@ -3,7 +3,7 @@ name = "agentguard"
 version = "0.2.0-dev"
 edition = "2021"
 rust-version = "1.74"
-description = "Local policy and Linux sandbox guard for AI-assisted development"
+description = "Local policy, Git metadata, and Linux sandbox guard for AI-assisted development"
 license = "MIT"
 repository = "https://github.com/BLCCoreStudio/AgentGuard"
 
