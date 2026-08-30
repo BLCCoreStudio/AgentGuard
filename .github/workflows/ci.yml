@@ -36,7 +36,7 @@ jobs:
         run: ./target/release/agentguard scan-git . --rev "$BASE_SHA..$HEAD_SHA"
       - name: Check pull request body metadata
         if: github.event_name == 'pull_request'
-        run: ./target/release/agentguard check-commit-msg "$RUNNER_TEMP/agentguard-pr-body.txt" --repo .
+        run: ./target/release/agentguard check-git-text "$RUNNER_TEMP/agentguard-pr-body.txt" --repo .
 
   msrv:
     runs-on: ubuntu-24.04
