@@ -260,8 +260,37 @@ pub fn commit_findings_json(findings: &[Finding]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{commit_findings_json, managed_hook_script, parse_policy_config};
+    use super::{
+        commit_findings_json, install_commit_hook, managed_hook_script, parse_policy_config,
+        resolve_policy, write_policy_config,
+    };
     use crate::git_metadata::{Finding, Policy};
+    use std::{
+        env, fs,
+        path::PathBuf,
+        process::Command,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn test_repo(label: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after unix epoch")
+            .as_nanos();
+        let path = env::temp_dir().join(format!(
+            "agentguard-{label}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("create test repo directory");
+        let status = Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .arg(&path)
+            .status()
+            .expect("launch git init");
+        assert!(status.success());
+        path
+    }
 
     #[test]
     fn config_defaults_to_privacy() {
@@ -285,10 +314,64 @@ mod tests {
     }
 
     #[test]
+    fn repository_policy_round_trips_from_git_root() {
+        let repo = test_repo("policy");
+        let nested = repo.join("nested");
+        fs::create_dir_all(&nested).expect("create nested directory");
+
+        let path = write_policy_config(&nested, Policy::Clean).expect("write policy");
+        assert_eq!(path, repo.join(".agentguard.toml"));
+        assert_eq!(
+            resolve_policy(&nested, None).expect("resolve policy"),
+            Policy::Clean
+        );
+
+        fs::remove_dir_all(repo).expect("remove test repo");
+    }
+
+    #[test]
     fn managed_hook_uses_repository_policy() {
         let script = managed_hook_script();
         assert!(script.contains("agentguard-managed-hook"));
         assert!(script.contains("--repo"));
+    }
+
+    #[test]
+    fn hook_installer_honors_core_hooks_path() {
+        let repo = test_repo("hooks-path");
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(["config", "core.hooksPath", ".githooks"])
+            .status()
+            .expect("configure hooks path");
+        assert!(status.success());
+
+        let hook = install_commit_hook(&repo).expect("install managed hook");
+        assert_eq!(hook, repo.join(".githooks/commit-msg"));
+        assert!(fs::read_to_string(&hook)
+            .expect("read managed hook")
+            .contains("agentguard-managed-hook"));
+
+        fs::remove_dir_all(repo).expect("remove test repo");
+    }
+
+    #[test]
+    fn hook_installer_refuses_unmanaged_hook() {
+        let repo = test_repo("unmanaged-hook");
+        let hooks = repo.join(".git/hooks");
+        fs::create_dir_all(&hooks).expect("create hooks directory");
+        let hook = hooks.join("commit-msg");
+        fs::write(&hook, "#!/bin/sh\necho existing\n").expect("write unmanaged hook");
+
+        let error = install_commit_hook(&repo).expect_err("must refuse unmanaged hook");
+        assert!(error.contains("refusing to overwrite existing unmanaged hook"));
+        assert_eq!(
+            fs::read_to_string(&hook).expect("read unmanaged hook"),
+            "#!/bin/sh\necho existing\n"
+        );
+
+        fs::remove_dir_all(repo).expect("remove test repo");
     }
 
     #[test]
