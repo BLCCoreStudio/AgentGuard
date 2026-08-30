@@ -11,6 +11,8 @@ Start with the current preview:
 ```bash
 agentguard check -- cargo test
 agentguard scan-prompt AGENTS.md
+agentguard init-policy . --policy privacy
+agentguard install-hook .
 agentguard scan-git . --rev origin/main..HEAD
 agentguard plan ./project -- cargo test
 ```
@@ -53,7 +55,7 @@ Findings are review signals, not proof that content is malicious.
 
 ## Agent asset audit
 
-The development tree now includes an experimental `agentguard-assets` binary for repositories that use coding-agent instructions and reusable Agent Skills:
+The development tree includes an experimental `agentguard-assets` binary for repositories that use coding-agent instructions and reusable Agent Skills:
 
 ```bash
 cargo run --bin agentguard-assets -- ./project
@@ -73,25 +75,27 @@ The format checks follow the public Agent Skills specification where implemented
 
 AI coding agents can add metadata to commits, pull-request text, local session records, or repository configuration. Some metadata is useful provenance; other metadata may be unexpected, vendor-specific, or sensitive.
 
-The current preview deliberately separates those concerns instead of treating all AI attribution as unsafe.
+AgentGuard separates those concerns instead of treating all AI attribution as unsafe.
 
-Scan the latest 50 commits plus configured Git remotes:
+### Repository policy
 
-```bash
-agentguard scan-git .
-```
-
-Scan only commits in a revision/range:
+Create a policy file at the Git repository root:
 
 ```bash
-agentguard scan-git . --rev origin/main..HEAD
+agentguard init-policy . --policy privacy
 ```
 
-Use the stricter clean-history policy:
+This writes:
 
-```bash
-agentguard scan-git . --rev origin/main..HEAD --policy clean
+```toml
+# AgentGuard repository policy
+# Supported values: privacy, clean
+git_metadata_policy = "privacy"
 ```
+
+`scan-git` and AgentGuard-managed commit hooks automatically read `.agentguard.toml` from the repository root. A command-line `--policy` explicitly overrides the repository policy.
+
+`init-policy` refuses to overwrite an existing file so repository policy changes remain intentional and reviewable.
 
 ### Policies
 
@@ -106,27 +110,70 @@ agentguard scan-git . --rev origin/main..HEAD --policy clean
 - `GM003` — AI-agent `Co-authored-by` trailer
 - `GM004` — AI-tool `Generated with`, `Generated-by`, or `Made-with` signature
 
-This distinction is intentional: AgentGuard does not assume that AI provenance is bad. Teams that want provenance can keep the default `privacy` policy; teams that require attribution-free history can opt into `clean`.
+This distinction is intentional: AgentGuard does not assume AI provenance is bad. Teams that want provenance can keep `privacy`; teams that require attribution-free history can opt into `clean`.
 
-### Block before a commit lands
+### Scan Git history and remotes
 
-`check-commit-msg` is designed for Git `commit-msg` hooks and CI-style checks:
+Scan the latest 50 commits plus configured Git remotes:
 
 ```bash
-agentguard check-commit-msg .git/COMMIT_EDITMSG
-agentguard check-commit-msg .git/COMMIT_EDITMSG --policy clean
+agentguard scan-git .
 ```
 
-Example hook:
+Scan only a revision/range:
 
-```sh
-#!/bin/sh
-agentguard check-commit-msg "$1" --policy privacy
+```bash
+agentguard scan-git . --rev origin/main..HEAD
 ```
 
-A matching rule exits with status `3`, so the hook can stop the commit before the unwanted metadata is recorded.
+Override the repository policy for one run:
 
-The first preview is intentionally **detect + block**, not automatic history rewriting. Safe, reviewable remediation can be added later without making destructive Git history edits the default.
+```bash
+agentguard scan-git . --rev origin/main..HEAD --policy clean
+```
+
+### Machine-readable CI output
+
+Use JSON when a workflow or another tool needs structured findings:
+
+```bash
+agentguard scan-git . --rev origin/main..HEAD --format json
+```
+
+Example shape:
+
+```json
+{"ok":false,"findings":[{"code":"GM001","scope":"abc123","message":"Claude session URL/trailer detected in Git metadata"}]}
+```
+
+Exit codes stay unchanged, so CI can use both the JSON payload and status `3` to block a change.
+
+### Block metadata before a commit lands
+
+Install an AgentGuard-managed `commit-msg` hook:
+
+```bash
+agentguard install-hook .
+```
+
+The hook reads the repository policy every time it runs, so changing `.agentguard.toml` does not require reinstalling the hook.
+
+For safety, `install-hook`:
+
+- creates or refreshes hooks that contain AgentGuard's management marker
+- refuses to overwrite an existing hook it does not manage
+- marks the managed hook executable on Unix platforms
+
+Manual checking is also available:
+
+```bash
+agentguard check-commit-msg .git/COMMIT_EDITMSG --repo .
+agentguard check-commit-msg .git/COMMIT_EDITMSG --repo . --format json
+```
+
+A matching rule exits with status `3`, allowing Git hooks and CI jobs to stop unwanted metadata before it is recorded.
+
+The current implementation remains deliberately **detect + block**. It does not automatically rewrite Git history.
 
 ### Why this exists
 
@@ -193,7 +240,7 @@ A command executed inside the sandbox may return its own non-zero exit status.
 
 ## Build
 
-Requires Rust 1.74 or newer and Git for `scan-git`.
+Requires Rust 1.74 or newer and Git for Git metadata workflows.
 
 ```bash
 cargo build --locked
@@ -208,6 +255,8 @@ cargo test --locked --all-targets
 - Prompt and agent-asset scanning does not execute or upload scanned content.
 - Git metadata checks inspect only local Git output and commit-message files; they do not upload repository content.
 - `scan-git` currently inspects at most 50 commits from the selected revision/range plus configured Git remotes.
+- `.agentguard.toml` currently supports only the documented `git_metadata_policy` key; AgentGuard does not claim to implement general TOML parsing.
+- `install-hook` will not merge itself into an unrelated existing hook; manual integration is required in that case.
 - The Git metadata rules intentionally do not attempt to infer whether every human-looking email address is private; that would create unacceptable false positives without stronger context.
 - Agent Skills parsing in the experimental asset audit is intentionally narrow and is not a general-purpose YAML validator.
 - A clean result is not proof that an action, prompt, `AGENTS.md`, skill, or Git history is safe.
