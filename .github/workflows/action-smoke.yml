@@ -1,0 +1,27 @@
+name: Action smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Run AgentGuard as a local Action
+        uses: ./
+        with:
+          path: .
+          revision: HEAD
+          policy: privacy
+          format: json
